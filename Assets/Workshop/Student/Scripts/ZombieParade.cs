@@ -7,7 +7,6 @@ namespace Solution
     public class ZombieParade : OOPEnemy
     {
         // ใช้ LinkedList ในการจัดการส่วนของงูเพื่อประสิทธิภาพในการเพิ่ม/ลบ
-        // ใช้ LinkedList ในการจัดการส่วนของงูเพื่อประสิทธิภาพในการเพิ่ม/ลบ
         private LinkedList<GameObject> Parade = new LinkedList<GameObject>();
         public int SizeParade = 3;
         int timer = 0;
@@ -20,11 +19,14 @@ namespace Solution
         {
             base.SetUP();
             moveDirection = Vector3.up;
-            // เริ่ม Coroutine สำหรับการเคลื่อนที่
+
+            // แก้ไขจุดที่ 1: กำหนด positionX และ positionY ให้ถูกต้อง
             positionX = (int)transform.position.x;
-            positionX = (int)transform.position.y;
+            positionY = (int)transform.position.y;
+
             StartCoroutine(MoveParade());
         }
+
         private Vector3 RandomizeDirection()
         {
             List<Vector3> possibleDirections = new List<Vector3>
@@ -37,58 +39,73 @@ namespace Solution
 
             return possibleDirections[Random.Range(0, possibleDirections.Count)];
         }
+
         // Coroutine สำหรับการเคลื่อนที่ทีละช่อง
         IEnumerator MoveParade()
-        {      
-            //0. สร้างหัวงู
+        {
+            // 0. ใส่หัวงูไว้เป็นตัวแรก
             Parade.AddFirst(this.gameObject);
+
             while (isAlive)
             {
-                // 1. ดึงส่วนแรกของงูออกมา
-                LinkedListNode<GameObject> firstNode = Parade.First;
-                GameObject firstPart = firstNode.Value;
-
-                // 2. ดึงส่วนสุดท้ายของงูออกมา
-                LinkedListNode<GameObject> lastNode = Parade.Last;
-                GameObject lastPart = lastNode.Value;
-             
-                // 3. ลบส่วนสุดท้ายออกจาก LinkedList
-                Parade.RemoveLast();
-
-                // 5. กำหนดตำแหน่งและทิศทางของส่วนที่ถูกย้ายมาใหม่
-                // ให้ไปอยู่ที่ตำแหน่งของส่วนหัวงู (ซึ่งเพิ่งเคลื่อนที่ไปเมื่อครู่)
-                int toX = 0;
-                int toY = 0;
-
+                // สุ่มหาทิศทางเคลื่อนที่ใหม่ที่ไม่ชนสิ่งกีดขวาง
+                int toX = positionX;
+                int toY = positionY;
                 bool isCollide = true;
                 int countTryToFind = 0;
-                while (isCollide == true || countTryToFind>10)
+
+                // แก้ไขจุดที่ 2: ใช้ && และ <= 10 เพื่อป้องกัน Infinite Loop
+                while (isCollide && countTryToFind <= 10)
                 {
                     moveDirection = RandomizeDirection();
-                    toX = (int)(firstPart.transform.position.x + moveDirection.x);
-                    toY = (int)(firstPart.transform.position.y + moveDirection.y);
+                    toX = (int)(transform.position.x + moveDirection.x);
+                    toY = (int)(transform.position.y + moveDirection.y);
                     countTryToFind++;
-                    if (countTryToFind > 10) { 
+
+                    if (countTryToFind > 10)
+                    {
                         toX = positionX;
                         toY = positionY;
+                        break;
                     }
+
                     isCollide = IsCollision(toX, toY);
                 }
 
-                //6. เคลื่อนที่
-                mapGenerator.mapdata[positionX, positionY] = null;
-                positionX = toX;
-                positionY = toY;
-                lastPart.transform.position = new Vector3(positionX, positionY, 0);
-                lastPart.GetComponent<SpriteRenderer>().flipX = moveDirection == Vector3.right;
-                mapGenerator.mapdata[positionX, positionY] = lastPart.GetComponent<Identity>();
+                // ถ้าหาทางไปได้ (ตำแหน่งเปลี่ยน)
+                if (toX != positionX || toY != positionY)
+                {
+                    // เคลียร์ตำแหน่งหางสุดใน MapData ก่อนเคลื่อนที่
+                    GameObject lastPart = Parade.Last.Value;
+                    int lastX = (int)lastPart.transform.position.x;
+                    int lastY = (int)lastPart.transform.position.y;
+                    mapGenerator.mapdata[lastX, lastY] = null;
 
+                    // ย้ายลำตัวจากหลังมาหน้าตามตำแหน่งหัว
+                    if (Parade.Count > 1)
+                    {
+                        LinkedListNode<GameObject> lastNode = Parade.Last;
+                        Parade.RemoveLast();
 
-                // 7. เพิ่มส่วนนั้นกลับเข้าไปเป็นส่วนที่สองของ LinkedList
-                // (ซึ่งก็คือส่วนแรกของลำตัว)
-                Parade.AddFirst(lastNode);
-                // รอตามเวลาที่กำหนดก่อนการเคลื่อนที่ครั้งต่อไป
-                if (Parade.Count < SizeParade) {
+                        // ย้ายตำแหน่งวัตถุหางไปไว้ที่ตำแหน่งเดิมของหัวก่อนเดิน
+                        lastNode.Value.transform.position = new Vector3(positionX, positionY, 0);
+                        mapGenerator.mapdata[positionX, positionY] = lastNode.Value.GetComponent<Identity>();
+
+                        // แทรกวัตถุไว้ต่อจากหัว (Index 1)
+                        Parade.AddAfter(Parade.First, lastNode);
+                    }
+
+                    // เคลื่อนที่ส่วนหัวไปตำแหน่งใหม่
+                    positionX = toX;
+                    positionY = toY;
+                    transform.position = new Vector3(positionX, positionY, 0);
+                    GetComponent<SpriteRenderer>().flipX = moveDirection == Vector3.right;
+                    mapGenerator.mapdata[positionX, positionY] = GetComponent<Identity>();
+                }
+
+                // เพิ่มขนาดงูเมื่อถึงรอบที่กำหนด
+                if (Parade.Count < SizeParade)
+                {
                     timer++;
                     if (timer > 3)
                     {
@@ -96,31 +113,34 @@ namespace Solution
                         timer = 0;
                     }
                 }
+
                 yield return new WaitForSeconds(moveInterval);
             }
         }
+
         private bool IsCollision(int x, int y)
         {
-            // 4. ตรวจสอบสิ่งกีดขวาง
+            // ตรวจสอบสิ่งกีดขวางใน Map
             if (HasPlacement(x, y))
             {
                 return true;
             }
             return false;
         }
-        
+
         // ฟังก์ชันสำหรับเพิ่มส่วนของงู (Grow)
         private void Grow()
         {
+            if (bodyPrefab == null || bodyPrefab.Length == 0) return;
+
             GameObject newPart = Instantiate(bodyPrefab[0]);
-            // กำหนดตำแหน่งเริ่มต้นของส่วนใหม่ให้อยู่ที่เดียวกับส่วนสุดท้ายของงู
             GameObject lastPart = Parade.Last.Value;
             newPart.transform.position = lastPart.transform.position;
-            mapGenerator.SetUpItem(positionX,positionY, newPart, mapGenerator.enemyParent, mapGenerator.enemy);
-            //newPart.transform.rotation = lastPart.transform.rotation;
-            // เพิ่มส่วนใหม่เข้าไปใน Linked List
+
+            mapGenerator.SetUpItem((int)lastPart.transform.position.x, (int)lastPart.transform.position.y, newPart, mapGenerator.enemyParent, mapGenerator.enemy);
+
+            // เพิ่มส่วนใหม่ไว้ท้ายสุดของ LinkedList
             Parade.AddLast(newPart);
         }
-
     }
 }
